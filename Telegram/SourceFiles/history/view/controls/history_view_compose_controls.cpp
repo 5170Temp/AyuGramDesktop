@@ -143,6 +143,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // AyuGram includes
 #include "data/data_ai_compose_tones.h"
 #include "ayu/ayu_settings.h"
+#include "ayu/features/send_as/send_as_account.h"
 #include "history/history_item_components.h"
 
 
@@ -1718,7 +1719,10 @@ void ComposeControls::setCurrentDialogsEntryState(
 }
 
 PeerData *ComposeControls::sendAsPeer() const {
-	return (_sendAs && _history)
+	return (_sendAs
+		&& _history
+		&& session().sendAsPeers().shouldChoose(
+			{ _history->peer, Main::SendAsType::Message }))
 		? session().sendAsPeers().resolveChosen(_history->peer).get()
 		: nullptr;
 }
@@ -5614,7 +5618,8 @@ bool ComposeControls::updateSendAsButton(
 	if (!_features.sendAs
 		|| !peer
 		|| isEditingMessage()
-		|| !session().sendAsPeers().shouldChoose({ peer, type })) {
+		|| (!session().sendAsPeers().shouldChoose({ peer, type })
+			&& (videoStream || AyuSendAs::accounts(peer).empty()))) {
 		if (!_sendAs) {
 			return false;
 		}

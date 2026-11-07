@@ -136,6 +136,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // AyuGram includes
 #include "ayu/ayu_settings.h"
 #include "ayu/features/message_shot/message_shot.h"
+#include "ayu/features/send_as/send_as_account.h"
 #include "base/unixtime.h"
 
 
@@ -2155,12 +2156,11 @@ void ChatWidget::sendingFilesConfirmed(
 
 	const auto compress = bundle->way.sendImagesAsPhotos();
 	const auto type = compress ? SendMediaType::Photo : SendMediaType::File;
-	auto &api = session().api();
 	for (auto &group : bundle->groups) {
 		const auto album = (group.type != Ui::AlbumType::None)
 			? std::make_shared<SendingAlbum>()
 			: nullptr;
-		api.sendFiles(std::move(group.list), type, album, action);
+		AyuSendAs::sendFiles(std::move(group.list), type, album, action);
 	}
 	if (_composeControls->replyingToMessage().messageId
 			== action.replyTo.messageId) {
@@ -2259,7 +2259,7 @@ void ChatWidget::checkReplyReturns() {
 void ChatWidget::uploadFile(
 		const QByteArray &fileContent,
 		SendMediaType type) {
-	session().api().sendFile(fileContent, type, prepareSendAction({}));
+	AyuSendAs::sendFile(fileContent, type, prepareSendAction({}));
 }
 
 bool ChatWidget::showSendingFilesError(
@@ -2361,7 +2361,7 @@ void ChatWidget::sendVoice(const ComposeControls::VoiceToSend &data) {
 		return;
 	}
 
-	session().api().sendVoiceMessage(
+	AyuSendAs::sendVoiceMessage(
 		data.bytes,
 		data.waveform,
 		data.duration,
@@ -2618,6 +2618,7 @@ void ChatWidget::sendTextWithTags(
 	if (const auto field = _composeControls->fieldForMention(); field
 		&& hasText
 		&& message.webPage.url.isEmpty()
+		&& !AyuSendAs::chosen(_peer)
 		&& (field->document()->size().height() <= field->height())) {
 		controller()->sendingAnimation().appendSending({
 			.type = Ui::MessageSendingAnimationFrom::Type::Text,
@@ -2630,7 +2631,7 @@ void ChatWidget::sendTextWithTags(
 	const auto justMarkingAsRead = !hasText
 		&& message.webPage.url.isEmpty();
 	_justMarkingAsRead = justMarkingAsRead;
-	session().api().sendMessage(std::move(message), nextLocalMessageId);
+	AyuSendAs::sendMessage(std::move(message), nextLocalMessageId);
 	_justMarkingAsRead = false;
 
 	_composeControls->clear(justMarkingAsRead);
@@ -3161,7 +3162,7 @@ bool ChatWidget::sendExistingDocument(
 		}
 	}
 
-	Api::SendExistingDocument(
+	AyuSendAs::sendExistingDocument(
 		std::move(messageToSend),
 		document,
 		localId);
@@ -5428,7 +5429,7 @@ void ChatWidget::sendBotCommand(
 			return;
 		}
 	}
-	session().api().sendMessage(std::move(message));
+	AyuSendAs::sendMessage(std::move(message));
 	if (request.replyTo) {
 		const auto replyMatches = (_composeControls->replyingToMessage()
 			.messageId == outgoingReplyTo.messageId);

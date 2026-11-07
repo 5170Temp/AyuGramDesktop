@@ -24,6 +24,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_calls.h"
 #include "styles/style_chat_helpers.h"
 
+// AyuGram includes
+#include "ayu/features/send_as/send_as_account.h"
+#include "data/data_changes.h"
+
+
 namespace Ui {
 namespace {
 
@@ -225,11 +230,18 @@ void SetupSendAsButton(
 		}
 		const auto key = Main::SendAsKey{ peer, Main::SendAsType::Message };
 		const auto session = &peer->session();
-		const auto &list = session->sendAsPeers().list(key);
+		auto list = session->sendAsPeers().list(key);
+		for (const auto account : AyuSendAs::accounts(peer)) {
+			list.push_back({ .peer = account });
+		}
 		if (list.size() < 2) {
 			return;
 		}
 		const auto done = [=](not_null<PeerData*> sendAs) {
+			if (&sendAs->session() != session) {
+				AyuSendAs::setChosen(peer, sendAs->asUser());
+				return true;
+			}
 			const auto i = ranges::find(
 				list,
 				sendAs,
@@ -250,36 +262,36 @@ void SetupSendAsButton(
 					u"send_as"_q);
 				return false;
 			}
-			session->sendAsPeers().saveChosen(peer, sendAs);
+			AyuSendAs::setChosen(peer, nullptr);
+			if (sendAs != session->sendAsPeers().resolveChosen(peer)) {
+				session->sendAsPeers().saveChosen(peer, sendAs);
+			}
 			return true;
 		};
 		show->show(Box(
 			Ui::ChooseSendAsBox,
 			st,
 			list,
-			session->sendAsPeers().resolveChosen(peer),
+			AyuSendAs::resolveChosen(peer),
 			done));
 	});
 
 	const auto size = st.button.size;
 	auto userpic = current->value(
 	) | rpl::filter([=](PeerData *peer) {
-		return peer && peer->isChannel();
+		return peer && (peer->isChannel() || peer->isChat());
 	}) | rpl::map([=](not_null<PeerData*> peer) {
-		const auto channel = peer->asChannel();
-
-		auto updates = rpl::single(
-			rpl::empty
-		) | rpl::then(channel->session().sendAsPeers().updated(
-		) | rpl::filter(
-			_1 == Main::SendAsKey(channel, Main::SendAsType::Message)
-		) | rpl::to_empty);
-
-		return rpl::combine(
-			std::move(updates),
-			channel->adminRightsValue()
+		const auto session = &peer->session();
+		const auto key = Main::SendAsKey(peer, Main::SendAsType::Message);
+		return rpl::merge(
+			session->changes().peerFlagsValue(
+				peer,
+				Data::PeerUpdate::Flag::Rights) | rpl::to_empty,
+			session->sendAsPeers().updated(
+			) | rpl::filter(_1 == key) | rpl::to_empty,
+			AyuSendAs::changes(peer)
 		) | rpl::map([=] {
-			return channel->session().sendAsPeers().resolveChosen(channel);
+			return AyuSendAs::resolveChosen(peer);
 		}) | rpl::distinct_until_changed(
 		) | rpl::map([=](not_null<PeerData*> chosen) {
 			return Data::PeerUserpicImageValue(

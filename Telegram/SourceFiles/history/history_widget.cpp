@@ -223,6 +223,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ayu/utils/telegram_helpers.h"
 #include "ayu/features/message_shot/message_shot.h"
 #include "ayu/features/forward/ayu_forward.h"
+#include "ayu/features/send_as/send_as_account.h"
 #include "boxes/abstract_box.h"
 
 
@@ -4124,7 +4125,9 @@ void HistoryWidget::refreshSendAsToggle() {
 	Expects(_peer != nullptr);
 
 	const auto key = Main::SendAsKey{ _peer, Main::SendAsType::Message };
-	if (_editMsgId || !session().sendAsPeers().shouldChoose(key)) {
+	if (_editMsgId
+		|| (!session().sendAsPeers().shouldChoose(key)
+			&& AyuSendAs::accounts(_peer).empty())) {
 		_sendAs.destroy();
 		return;
 	} else if (_sendAs) {
@@ -5771,7 +5774,12 @@ Api::SendAction HistoryWidget::prepareSendAction(
 	}
 
 	result.options.suggest = suggestOptions();
-	result.options.sendAs = _sendAs
+	const auto sendAsKey = Main::SendAsKey{
+		_history->peer,
+		Main::SendAsType::Message,
+	};
+	result.options.sendAs = (_sendAs
+		&& _history->session().sendAsPeers().shouldChoose(sendAsKey))
 		? _history->session().sendAsPeers().resolveChosen(
 			_history->peer).get()
 		: nullptr;
@@ -5798,7 +5806,7 @@ void HistoryWidget::sendVoice(const VoiceToSend &data) {
 		return;
 	}
 
-	session().api().sendVoiceMessage(
+	AyuSendAs::sendVoiceMessage(
 		data.bytes,
 		data.waveform,
 		data.duration,
@@ -5997,6 +6005,7 @@ void HistoryWidget::sendTextWithTags(
 
 	if (hasText
 		&& message.webPage.url.isEmpty()
+		&& !AyuSendAs::chosen(_peer)
 		&& (_field->document()->size().height() <= _field->height())) {
 		controller()->sendingAnimation().appendSending({
 			.type = Ui::MessageSendingAnimationFrom::Type::Text,
@@ -6008,7 +6017,7 @@ void HistoryWidget::sendTextWithTags(
 	// Just a flag not to drop reply info if we're not sending anything.
 	_justMarkingAsRead = !hasText
 		&& message.webPage.url.isEmpty();
-	session().api().sendMessage(std::move(message), nextLocalMessageId);
+	AyuSendAs::sendMessage(std::move(message), nextLocalMessageId);
 	_justMarkingAsRead = false;
 
 	clearFieldText();
@@ -6664,7 +6673,7 @@ void HistoryWidget::sendBotCommand(
 	const auto lastKeyboardUsed = (forMsgId == request.replyTo.messageId)
 		&& (forMsgId == FullMsgId(_peer->id, _history->lastKeyboardId));
 
-	session().api().sendMessage(std::move(message));
+	AyuSendAs::sendMessage(std::move(message));
 	if (request.replyTo) {
 		if (_replyTo == request.replyTo) {
 			cancelReply();
@@ -8097,12 +8106,11 @@ void HistoryWidget::sendingFilesConfirmed(
 		}
 	}
 
-	auto &api = session().api();
 	for (auto &group : bundle->groups) {
 		const auto album = (group.type != Ui::AlbumType::None)
 			? std::make_shared<SendingAlbum>()
 			: nullptr;
-		api.sendFiles(std::move(group.list), type, album, action);
+		AyuSendAs::sendFiles(std::move(group.list), type, album, action);
 	}
 }
 
@@ -8209,7 +8217,7 @@ void HistoryWidget::uploadFile(
 		SendMediaType type) {
 	if (!canWriteMessage()) return;
 
-	session().api().sendFile(fileContent, type, prepareSendAction({}));
+	AyuSendAs::sendFile(fileContent, type, prepareSendAction({}));
 }
 
 void HistoryWidget::handleHistoryChange(not_null<const History*> history) {
@@ -10190,7 +10198,7 @@ bool HistoryWidget::sendExistingDocument(
 		}
 	}
 
-	Api::SendExistingDocument(
+	AyuSendAs::sendExistingDocument(
 		std::move(messageToSend),
 		document,
 		localId);

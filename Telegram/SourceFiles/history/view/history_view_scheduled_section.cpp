@@ -69,6 +69,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // AyuGram includes
 #include "ayu/features/message_shot/message_shot.h"
+#include "ayu/features/send_as/send_as_account.h"
 
 
 namespace HistoryView {
@@ -663,12 +664,11 @@ void ScheduledWidget::sendingFilesConfirmed(
 	const auto type = compress ? SendMediaType::Photo : SendMediaType::File;
 	auto action = prepareSendAction(options);
 	action.clearDraft = false;
-	auto &api = session().api();
 	for (auto &group : bundle->groups) {
 		const auto album = (group.type != Ui::AlbumType::None)
 			? std::make_shared<SendingAlbum>()
 			: nullptr;
-		api.sendFiles(std::move(group.list), type, album, action);
+		AyuSendAs::sendFiles(std::move(group.list), type, album, action);
 	}
 }
 
@@ -715,7 +715,7 @@ void ScheduledWidget::uploadFile(
 		const QByteArray &fileContent,
 		SendMediaType type) {
 	const auto callback = [=](Api::SendOptions options) {
-		session().api().sendFile(
+		AyuSendAs::sendFile(
 			fileContent,
 			type,
 			prepareSendAction(options));
@@ -784,7 +784,7 @@ void ScheduledWidget::send(Api::SendOptions options) {
 	message.textWithTags = _composeControls->getTextWithAppliedMarkdown();
 	message.webPage = webPageDraft;
 
-	session().api().sendMessage(std::move(message));
+	AyuSendAs::sendMessage(std::move(message));
 
 	_composeControls->cancelForward();
 	_composeControls->clear();
@@ -809,7 +809,7 @@ void ScheduledWidget::sendVoice(const Controls::VoiceToSend &data) {
 void ScheduledWidget::sendVoice(
 		const Controls::VoiceToSend &data,
 		Api::SendOptions options) {
-	session().api().sendVoiceMessage(
+	AyuSendAs::sendVoiceMessage(
 		data.bytes,
 		data.waveform,
 		data.duration,
@@ -913,7 +913,7 @@ bool ScheduledWidget::sendExistingDocument(
 		return false;
 	}
 
-	Api::SendExistingDocument(std::move(messageToSend), document);
+	AyuSendAs::sendExistingDocument(std::move(messageToSend), document);
 
 	_composeControls->clearFieldAfterStickerSend();
 	_composeControls->hidePanelsAnimated();
@@ -1624,7 +1624,7 @@ void ScheduledWidget::listSendBotCommand(
 			context);
 		auto message = Api::MessageToSend(prepareSendAction(options));
 		message.textWithTags = { text };
-		session().api().sendMessage(std::move(message));
+		AyuSendAs::sendMessage(std::move(message));
 	};
 	controller()->show(
 		PrepareScheduleBox(this, _show, sendMenuDetails(), callback));
