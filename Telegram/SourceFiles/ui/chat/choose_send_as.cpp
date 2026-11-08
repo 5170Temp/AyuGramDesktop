@@ -232,7 +232,7 @@ void SetupSendAsButton(
 		const auto session = &peer->session();
 		auto list = session->sendAsPeers().list(key);
 		for (const auto account : AyuSendAs::accounts(peer)) {
-			list.push_back({ .peer = account });
+			list.push_back({ .peer = account.get() });
 		}
 		if (list.size() < 2) {
 			return;
