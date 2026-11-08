@@ -113,6 +113,34 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      - name: Free runner disk space.
+        shell: pwsh
+        run: |
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+          $dirs = @(
+            'C:\Android',
+            'C:\ghcup',
+            'C:\msys64',
+            'C:\Miniconda',
+            'C:\SeleniumWebDrivers',
+            'C:\Program Files\Microsoft SQL Server',
+            'C:\Program Files\PostgreSQL',
+            'C:\Program Files\MongoDB',
+            'C:\hostedtoolcache\windows\CodeQL',
+            'C:\hostedtoolcache\windows\go',
+            'C:\hostedtoolcache\windows\PyPy',
+            'C:\hostedtoolcache\windows\Ruby',
+            'C:\hostedtoolcache\windows\Java_Temurin-Hotspot_jdk'
+          )
+          foreach ($d in $dirs) {
+            if (Test-Path $d) { cmd /c "rmdir /s /q `"$d`"" }
+          }
+          if (Get-Command docker -ErrorAction SilentlyContinue) {
+            docker system prune -a -f | Out-Null
+          }
+          Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+          exit 0
+
       - name: Prepare directories.
         run: |
           mkdir %userprofile%\TBuild\Libraries
@@ -188,7 +216,9 @@ jobs:
 
       - name: Libraries.
         run: |
-          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent
+          call %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent || exit /b 1
+          rmdir /s /q %TBUILD%\ThirdParty\msys64
+          exit /b 0
 
       - name: AyuGram build.
         run: |
@@ -203,6 +233,11 @@ jobs:
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=ON
 
           cmake --build ..\out --config Debug --parallel
+
+      - name: Disk space report.
+        if: always()
+        shell: pwsh
+        run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='UsedGB';e={[math]::Round($_.Used/1GB,1)}}, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
 
       - name: Move artifact.
         run: |
